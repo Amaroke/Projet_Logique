@@ -1,7 +1,7 @@
-:- op(20,xfy,?=).
+% Permet de retirer les Warnings liés au Singleton
+:- style_check(-singleton).
 
 % Prédicats d'affichage fournis
-
 % set_echo: ce prédicat active l'affichage par le prédicat echo
 set_echo :- assert(echo_on).
 
@@ -10,6 +10,38 @@ clr_echo :- retractall(echo_on).
 
 % echo(T): si le flag echo_on est positionné, echo(T) affiche le terme T
 %          sinon, echo(T) réussit simplement en ne faisant rien.
-
 echo(T) :- echo_on, !, write(T).
 echo(_).
+
+
+% Définition de l'opérateur ?=
+:- op(20, xfy, ?=).
+
+
+% Définition de occur_check
+occur_check(V, T) :- compound(T), arg(_, T, X), compound(X), occur_check(V, X), !.
+occur_check(V, T) :- compound(T), arg(_, T, X), V == X, !.
+
+
+% Définition des règles
+% Définiton de la règle Rename
+regle(X ?= T, rename) :- var(X), var(T), !.
+
+% Définition de la règle Simplify
+regle(X ?= T, simplify) :- var(X), atomic(T), !.
+regle(X ?= T, simplify) :- atomic(X), atomic(T), X == T, !.
+
+% Définition de la règle Expand
+regle(X ?= T, expand) :- compound(T), var(X), not(occur_check(X, T)), !.
+
+% Défintion de la règle Check
+regle(X ?= T, check) :- X \== T, var(X), occur_check(X, T), !. 
+
+% Définition de la règle Orient
+regle(T ?= X, orient) :- nonvar(T), var(X), !.
+
+% Définition de la règle Decompose
+regle(X ?= Y, decompose) :- compound(X), compound(Y), compound_name_arity(X, NAME1, ARITY1), compound_name_arity(Y, NAME2, ARITY2),  NAME1 == NAME2, ARITY1 == ARITY2, !.
+
+% Définition de la règle Clash
+regle(X ?= Y, clash) :- compound(X), compound(Y), compound_name_arity(X, NAME1, ARITY1), compound_name_arity(Y, NAME2, ARITY2), not((NAME1 == NAME2, ARITY1 == ARITY2)), !.
