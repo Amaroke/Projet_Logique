@@ -2,6 +2,8 @@
 % Disable warnings about singleton variables
 :- style_check(-singleton).
 
+
+% Tests des règles
 :- begin_tests(regle).
 
 
@@ -208,7 +210,7 @@ test(clash6, [fail]) :-
 
 
 % Tests de Occur-check
-% OK car X est une variable, f(X) un terme composé et que f(X) contient X
+% OK car X est une variable, f(X) un terme composé et que f(X) contient X.
 test(occur_check) :-
     occur_check(X, f(X)).
 
@@ -242,7 +244,23 @@ test(occur_check8) :-
 
 :- end_tests(regle).
 
+
+% Tests des réduits
 :- begin_tests(reduit).
+
+
+% Tests de Rename
+% Si on applique rename sur A ?= B rien n'en résulte, rename n'ajoutant pas d'équation.
+test(rename) :-
+    reduit(rename, A ?= B, [], []).
+
+% Si on applique A ?= B sur A ?= a, A est substitué par B.
+test(rename2) :-
+	reduit(rename, A ?= B, [A ?= a], [B ?= a]).
+
+% Si on applique A ?= B sur A ?= a et A ?= f(A), A est substitué par B, en résulte B ?= a, B ?= f(B).
+test(rename3) :-
+    reduit(rename, A ?= B, [A ?= a, A ?= f(A)], [B ?= a, B ?= f(B)]).
 
 :- end_tests(reduit).
 

@@ -61,7 +61,7 @@ reduit(check, _, _, _) :- !, fail.
 reduit(orient, T ?= X, P, [X ?= T | P]).    
 
 % Définition de réduction de Decompose
-reduit(decompose, X ?= Y, P, Q) :- compound_name_arguments(X, _, Args1), compound_name_arguments(Y, _, Args2), remplace(Args1, Args2, Result), append(Result, P, Q).
+reduit(decompose, X ?= Y, P, Q) :- X =.. [_ | Args1], Y =.. [_ | Args2], remplace(Args1, Args2, Result), append(Result, P, Q).
 
 % Définition de réduction de Clash
 reduit(clash, _, _, _) :- !, fail.
@@ -72,5 +72,96 @@ remplace([A|Args1], [B|Args2], [A ?= B | Temp]) :- remplace(Args1, Args2, Temp).
 
 
 % Définition de Unifie
-unifie([E|P]):- regle(E, R), reduit(R, E, P, Q), !, unifie(Q).
-unifie([]).
+unifie([]). % Condition d'arrêt
+unifie([E|P]):- set_echo, trace_systeme([E|P]), regle(E, R),  trace_regle(E, R), reduit(R, E, P, Q), !, unifie(Q).
+
+
+% Question 2
+% Définition de Unifie
+unifie([], _) :- echo('\n'), !. % Condition d'arrêt
+
+% Définition de Unifie avec choix_premier
+unifie([E|P], choix_premier) :- trace_systeme([E|P]), regle(E, R), trace_regle(E, R), reduit(R, E, P, Q), !, unifie(Q, _).
+
+% Définition de Unifie avec choix_pondere_1
+unifie(P, choix_pondere_1) :- ponderation_max(P, Q, _, _, [], ponderation1), !, unifie(Q, _).
+
+% Définition de Unifie avec choix_pondere_2
+unifie(P, choix_pondere_2) :- ponderation_max(P, Q, _, _, [], ponderation2), !, unifie(Q, _).
+
+% Définition de Unifie avec choix_pondere_3
+unifie(P, choix_pondere_3) :- ponderation_max(P, Q, _, _, [], ponderation3), !, unifie(Q, _).
+
+% Définition de Unifie avec choix_aleatoire
+unifie(P, choix_aleatoire) :-
+    length(P, Len), random(0, Len, Random), nth0(Random, P, Equation, Reste),
+    trace_systeme(P), regle(Equation, R), trace_regle(Equation, R), reduit(R, Equation, Reste, Q), !,
+    unifie(Q, choix_aleatoire).
+
+% Définition de ponderation_1 (clash, check > rename, simplify > orient > decompose > expand)
+ponderation(ponderation1, E, 4, clash) :- regle(E, clash).
+ponderation(ponderation1, E, 4, check) :- regle(E, check).
+ponderation(ponderation1, E, 3, rename) :- regle(E, rename).
+ponderation(ponderation1, E, 3, simplify) :- regle(E, simplify).
+ponderation(ponderation1, E, 2, orient) :- regle(E, orient).
+ponderation(ponderation1, E, 1, decompose) :- regle(E, decompose).
+ponderation(ponderation1, E, 0, expand) :- regle(E, expand).
+
+% Définition de ponderation_2 (clash, check > orient > decompose > rename, simplify > expand)
+ponderation(ponderation2, E, 4, clash) :- regle(E, clash).
+ponderation(ponderation2, E, 4, check) :- regle(E, check).
+ponderation(ponderation2, E, 3, orient) :- regle(E, orient).
+ponderation(ponderation2, E, 2, decompose) :- regle(E, decompose).
+ponderation(ponderation2, E, 2, rename) :- regle(E, rename).
+ponderation(ponderation2, E, 1, simplify) :- regle(E, simplify).
+ponderation(ponderation2, E, 0, expand) :- regle(E, expand).
+
+% Définition de ponderation_3 (clash, check > orient > decompose > expand > rename, simplify)
+ponderation(ponderation3, E, 4, clash) :- regle(E, clash).
+ponderation(ponderation3, E, 4, check) :- regle(E, check).
+ponderation(ponderation3, E, 3, orient) :- regle(E, orient).
+ponderation(ponderation3, E, 2, decompose) :- regle(E, decompose).
+ponderation(ponderation3, E, 1, expand) :- regle(E, expand).
+ponderation(ponderation3, E, 0, rename) :- regle(E, rename).
+ponderation(ponderation3, E, 0, simplify) :- regle(E, simplify).
+
+
+% On compare le poids des règles pouvant être appliqué sur les deux formules E et F, et on ajoute la forumle avec le poids le plus fort dans une liste L
+ponderation_max([F|P], Q, E, RegleE, Result, Ponderation) :-
+    ponderation(Ponderation, E, PoidsE, RegleE), ponderation(Ponderation, F, PoidsF, RegleF),
+    (PoidsE > PoidsF -> (X = E, Reste = F, Regle = RegleE); (X = F, Reste = E, Regle = RegleF)), !,
+    ponderation_max(P, Q, X, Regle, [Reste|Result], Ponderation).
+
+
+% Une fois ordonné on lance la réduction.
+ponderation_max([], Q, E, R, L, _) :- trace_systeme([E|L]), trace_regle(E, R), reduit(R, E, L, Q), !.
+
+
+% Question 3
+% Inhibe l'affichage.
+unif(P, S) :- clr_echo, unifie(P, S).
+% Active la trace d'affichage des règles appliquées à chaque étape.
+trace_unif(P,S) :- set_echo, unifie(P, S).
+
+% Affiche l'état de P.
+trace_systeme(P) :- echo('system: ['), trace_arg_systeme(P), echo(']\n').
+
+% Affiche les différents arguments d'un système, avec des espaces après les ','.
+trace_arg_systeme([]). % Condition d'arrêt.
+trace_arg_systeme([A ?= B]) :- trace_terme(A), echo(' = '), trace_terme(B). % Affichage du dernuer argument.
+trace_arg_systeme([A ?= B|P]) :-
+    trace_terme(A), echo(' = '), trace_terme(B), echo(', '), trace_arg_systeme(P). % Affichage d'un argument.
+
+% Affichage des termes (pour les espaces après les ',' des termes composés).
+trace_terme(). % Condition d'arrêt.
+trace_terme(A) :- (var(A); atomic(A)), echo(A). % Affichage des variables et constantes.
+trace_terme(A) :- compound(A), A =.. [Name | Args], echo(Name), echo('('), trace_list(Args), echo(')').
+
+% Affichage de liste (pour les listes d'arguments des termes composés).
+trace_list(). % Condition d'arrêt.
+trace_list([A|[]]) :- echo(A). % Affichage du dernier argument.
+trace_list([A|List]) :- echo(A), echo(', '), trace_list(List). % Affichage d'un argument.
+
+% Affiche la règle utilisée.
+trace_regle(A ?= B, R) :-
+    echo(R), echo(': '), trace_terme(A), echo(' = '), trace_terme(B), echo('\n'). % Remplace les ?= par des = entouré d'espace.
