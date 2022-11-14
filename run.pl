@@ -35,14 +35,13 @@ regle(X ?= T, check) :- X \== T, var(X), compound(T), occur_check(X, T), !.
 regle(T ?= X, orient) :- nonvar(T), var(X).
 
 % Définition de la règle Decompose
-regle(X ?= Y, decompose) :- nonvar(X), nonvar(Y), functor(X, Name1, Arity1), functor(Y, Name2, Arity2),  Name1 == Name2, Arity1 == Arity2.
+regle(X ?= Y, decompose) :- nonvar(X), nonvar(Y), functor(X, Name1, Arity1, _), functor(Y, Name2, Arity2, _),  Name1 == Name2, Arity1 == Arity2.
 
 % Définition de la règle Clash
-regle(X ?= Y, clash) :- nonvar(X), nonvar(Y), functor(X, Name1, Arity1), functor(Y, Name2, Arity2), (Name1 \== Name2; Arity1 \== Arity2), !.
+regle(X ?= Y, clash) :- nonvar(X), nonvar(Y), functor(X, Name1, Arity1, _), functor(Y, Name2, Arity2, _), (Name1 \== Name2; Arity1 \== Arity2), !.
 
 % Définition de occur_check
 occur_check(V, T) :- var(V), compound(T), arg(_, T, X), (V == X ; (compound(X), occur_check(V, X))), !.
-
 
 % Définition des réductions
 % Définition de réduction de Rename
@@ -61,19 +60,23 @@ reduit(check, _, _, _) :- !, fail.
 reduit(orient, T ?= X, P, [X ?= T | P]).    
 
 % Définition de réduction de Decompose
-reduit(decompose, X ?= Y, P, Q) :- X =.. [_ | Args1], Y =.. [_ | Args2], remplace(Args1, Args2, Result), append(Result, P, Q).
+reduit(decompose, X ?= Y, P, Q) :- my_compound_args(X, _, Args1), my_compound_args(Y, _, Args2), remplace(Args1, Args2, Result), append(Result, P, Q).
 
 % Définition de réduction de Clash
 reduit(clash, _, _, _) :- !, fail.
 
-% Définition de remplace qui pose récursivement l'unification de tous les termes un à un
-remplace([], [], []). % Condition d'arrêt si les paramètres sont vides (pour éviter une boucle infinie)
+% Définition de remplace qui pose récursivement l'unification de tous les termes un à un.
+remplace([], [], []). % Condition d'arrêt si les paramètres sont vides (pour éviter une boucle infinie).
 remplace([A|Args1], [B|Args2], [A ?= B | Temp]) :- remplace(Args1, Args2, Temp).
+
+% Définition de my_compound_args qui permet de renvoyer le nombre d'arguments aussi bien de a que de a() ou de a(X).
+my_compound_args(X, Name, Args) :- atomic(X), X =.. [Name | Args], !.
+my_compound_args(X, Name, Args) :- compound(X), compound_name_arguments(X, Name, Args).
 
 
 % Définition de Unifie
 unifie([]). % Condition d'arrêt
-unifie([E|P]):- set_echo, trace_systeme([E|P]), regle(E, R),  trace_regle(E, R), reduit(R, E, P, Q), !, unifie(Q).
+unifie([E|P]):- trace_systeme([E|P]), regle(E, R), trace_regle(E, R), reduit(R, E, P, Q), !, unifie(Q).
 
 
 % Question 2
@@ -84,13 +87,13 @@ unifie([], _) :- echo('\n'), !. % Condition d'arrêt
 unifie([E|P], choix_premier) :- trace_systeme([E|P]), regle(E, R), trace_regle(E, R), reduit(R, E, P, Q), !, unifie(Q, _).
 
 % Définition de Unifie avec choix_pondere_1
-unifie(P, choix_pondere_1) :- ponderation_max(P, Q, _, _, [], ponderation1), !, unifie(Q, _).
+unifie([E|P], choix_pondere_1) :- regle(E,R), ponderation_max(P, Q, E, R, [], ponderation1), !, unifie(Q, choix_pondere_1).
 
 % Définition de Unifie avec choix_pondere_2
-unifie(P, choix_pondere_2) :- ponderation_max(P, Q, _, _, [], ponderation2), !, unifie(Q, _).
+unifie([E|P], choix_pondere_2) :- regle(E,R), ponderation_max(P, Q, E, R, [], ponderation2), !, unifie(Q, choix_pondere_2).
 
 % Définition de Unifie avec choix_pondere_3
-unifie(P, choix_pondere_3) :- ponderation_max(P, Q, _, _, [], ponderation3), !, unifie(Q, _).
+unifie([E|P], choix_pondere_3) :- regle(E,R), ponderation_max(P, Q, E, R, [], ponderation3), !, unifie(Q, choix_pondere_3).
 
 % Définition de Unifie avec choix_aleatoire
 unifie(P, choix_aleatoire) :-
@@ -126,7 +129,7 @@ ponderation(ponderation3, E, 0, rename) :- regle(E, rename).
 ponderation(ponderation3, E, 0, simplify) :- regle(E, simplify).
 
 
-% On compare le poids des règles pouvant être appliqué sur les deux formules E et F, et on ajoute la forumle avec le poids le plus fort dans une liste L
+% On compare le poids des règles sur les formules de P, deux à deux, récursivement, puis on les met dans l'ordre.
 ponderation_max([F|P], Q, E, RegleE, Result, Ponderation) :-
     ponderation(Ponderation, E, PoidsE, RegleE), ponderation(Ponderation, F, PoidsF, RegleF),
     (PoidsE > PoidsF -> (X = E, Reste = F, Regle = RegleE); (X = F, Reste = E, Regle = RegleF)), !,
@@ -155,10 +158,11 @@ trace_arg_systeme([A ?= B|P]) :-
 % Affichage des termes (pour les espaces après les ',' des termes composés).
 trace_terme(). % Condition d'arrêt.
 trace_terme(A) :- (var(A); atomic(A)), echo(A). % Affichage des variables et constantes.
-trace_terme(A) :- compound(A), A =.. [Name | Args], echo(Name), echo('('), trace_list(Args), echo(')').
+trace_terme(A) :- compound(A), my_compound_args(A, Name, Args), echo(Name), echo('('), trace_list(Args), echo(')').
 
 % Affichage de liste (pour les listes d'arguments des termes composés).
 trace_list(). % Condition d'arrêt.
+trace_list([]).
 trace_list([A|[]]) :- echo(A). % Affichage du dernier argument.
 trace_list([A|List]) :- echo(A), echo(', '), trace_list(List). % Affichage d'un argument.
 
